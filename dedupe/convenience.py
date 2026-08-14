@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import collections
@@ -7,7 +6,7 @@ import itertools
 import random
 import sys
 import warnings
-from typing import Iterator, Tuple, overload
+from typing import Iterator, Literal, Tuple, overload
 
 import numpy
 
@@ -15,7 +14,6 @@ import dedupe
 from dedupe._typing import (
     DataInt,
     DataStr,
-    Literal,
     RecordDict,
     RecordDictPair,
     RecordID,
@@ -43,7 +41,7 @@ def randomPairs(n_records: int, sample_size: int) -> IndicesIterator:
     else:
         try:
             random_pairs = numpy.array(
-                random.sample(range(n), sample_size), dtype=numpy.uint
+                random.sample(range(n), sample_size), dtype=numpy.uint64
             )
         except OverflowError:
             return randomPairsWithReplacement(n_records, sample_size)
@@ -51,10 +49,10 @@ def randomPairs(n_records: int, sample_size: int) -> IndicesIterator:
     b: int = 1 - 2 * n_records
 
     i = (-b - 2 * numpy.sqrt(2 * (n - random_pairs) + 0.25)) // 2
-    i = i.astype(numpy.uint)
+    i = i.astype(numpy.int64)
 
     j = random_pairs + i * (b + i + 2) // 2 + 1
-    j = j.astype(numpy.uint)
+    j = j.astype(numpy.uint64)
 
     return zip(i, j)
 
@@ -135,7 +133,7 @@ def console_label(deduper: dedupe.api.ActiveMatching) -> None:  # pragma: no cov
 
     finished = False
     use_previous = False
-    fields = unique(var.field for var in deduper.data_model.primary_variables)
+    fields = unique(var.field for var in deduper.data_model.field_variables)
 
     buffer_len = 1  # Max number of previous operations
     unlabeled: list[RecordDictPair] = []
@@ -163,7 +161,7 @@ def console_label(deduper: dedupe.api.ActiveMatching) -> None:  # pragma: no cov
 
         for record in record_pair:
             for field in fields:
-                line = "%s : %s" % (field, record[field])
+                line = f"{field} : {record[field]}"
                 _print(line)
             _print()
         _print(f"{n_match}/10 positive, {n_distinct}/10 negative")

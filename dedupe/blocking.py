@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import logging
@@ -34,7 +33,7 @@ def index_list() -> IndexList:
     return defaultdict(list)
 
 
-class Fingerprinter(object):
+class Fingerprinter:
     """Takes in a record and returns all blocks that record belongs to"""
 
     def __init__(self, predicates: Iterable[dedupe.predicates.Predicate]) -> None:
@@ -58,7 +57,7 @@ class Fingerprinter(object):
 
     def __call__(
         self, records: Iterable[Record], target: bool = False
-    ) -> Generator[tuple[str, RecordID], None, None]:
+    ) -> Generator[tuple[str, RecordID]]:
         """
         Generate the predicates for records. Yields tuples of (predicate,
         record_id).
@@ -117,7 +116,7 @@ class Fingerprinter(object):
 
     def reset_indices(self) -> None:
         """
-        Fingeprinter indicdes can take up a lot of memory. If you are
+        Fingerprinter indices can take up a lot of memory. If you are
         done with blocking, the method will reset the indices to free up.
         If you need to block again, the data will need to be re-indexed.
         """

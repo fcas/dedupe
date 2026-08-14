@@ -7,9 +7,9 @@ from benchmarks import canonical_matching, common
 
 def make_report(data, clustering):
     true_dupes = canonical_matching.get_true_dupes(data)
-    predicted_dupes = set(
+    predicted_dupes = {
         frozenset([a, b]) for a, result in clustering for b, score in result
-    )
+    }
     return common.Report.from_scores(true_dupes, predicted_dupes)
 
 
@@ -25,16 +25,17 @@ class Gazetteer(canonical_matching.Matching):
 
     def run(self, kwargs, use_settings=False):
         data_1, data_2 = self.data
+        gazetteer: dedupe.StaticGazetteer | dedupe.Gazetteer
 
         if use_settings and os.path.exists(self.settings_file):
             with open(self.settings_file, "rb") as f:
                 gazetteer = dedupe.StaticGazetteer(f)
         else:
             variables = [
-                {"field": "name", "type": "String"},
-                {"field": "address", "type": "String"},
-                {"field": "cuisine", "type": "String"},
-                {"field": "city", "type": "String"},
+                dedupe.variables.String("name"),
+                dedupe.variables.String("address"),
+                dedupe.variables.String("cuisine"),
+                dedupe.variables.String("city"),
             ]
 
             gazetteer = dedupe.Gazetteer(variables)

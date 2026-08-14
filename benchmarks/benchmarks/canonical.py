@@ -9,7 +9,7 @@ from benchmarks import common
 
 def make_report(data, clustering):
     true_dupes = common.get_true_dupes(data)
-    predicted_dupes = set([])
+    predicted_dupes = set()
     for cluser_id, _ in clustering:
         for pair in combinations(cluser_id, 2):
             predicted_dupes.add(frozenset(pair))
@@ -32,17 +32,19 @@ class Canonical:
         return make_report(self.data, clustering)
 
     def run(self, use_settings=False):
+        deduper: dedupe.StaticDedupe | dedupe.Dedupe
+
         if use_settings and os.path.exists(self.settings_file):
             with open(self.settings_file, "rb") as f:
                 deduper = dedupe.StaticDedupe(f)
 
         else:
             variables = [
-                {"field": "name", "type": "String"},
-                {"field": "name", "type": "Exact"},
-                {"field": "address", "type": "String"},
-                {"field": "cuisine", "type": "ShortString", "has missing": True},
-                {"field": "city", "type": "ShortString"},
+                dedupe.variables.String("name"),
+                dedupe.variables.Exact("name"),
+                dedupe.variables.String("address"),
+                dedupe.variables.ShortString("cuisine", has_missing=True),
+                dedupe.variables.ShortString("city"),
             ]
 
             deduper = dedupe.Dedupe(variables, num_cores=5)

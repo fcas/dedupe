@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# -*- coding: utf-8 -*-
 """
 dedupe provides the main user interface for the library the
 Dedupe class
@@ -14,7 +13,7 @@ import pickle
 import sqlite3
 import tempfile
 import warnings
-from typing import TYPE_CHECKING, cast, overload
+from typing import TYPE_CHECKING, Literal, cast, overload
 
 import numpy
 import sklearn.linear_model
@@ -27,18 +26,9 @@ import dedupe.datamodel as datamodel
 import dedupe.labeler as labeler
 import dedupe.predicates
 import dedupe.serializer as serializer
-from dedupe._typing import Literal
 
 if TYPE_CHECKING:
-    from typing import (
-        BinaryIO,
-        Collection,
-        Generator,
-        Iterable,
-        MutableMapping,
-        TextIO,
-        Union,
-    )
+    from typing import BinaryIO, Collection, Generator, Iterable, MutableMapping, TextIO
 
     import numpy.typing
 
@@ -70,13 +60,13 @@ if TYPE_CHECKING:
         Scores,
         TrainingData,
         TupleLinks,
-        VariableDefinition,
+        Variable,
     )
 
 logger = logging.getLogger(__name__)
 
 
-class Matching(object):
+class Matching:
     """
     Base Class for Record Matching Classes
     """
@@ -206,13 +196,15 @@ class DedupeMatching(IntegralMatching):
 
     @overload
     @staticmethod
-    def _add_singletons(all_ids: Iterable[int], clusters: ClustersInt) -> ClustersInt:
-        ...
+    def _add_singletons(
+        all_ids: Iterable[int], clusters: ClustersInt
+    ) -> ClustersInt: ...
 
     @overload
     @staticmethod
-    def _add_singletons(all_ids: Iterable[str], clusters: ClustersStr) -> ClustersStr:
-        ...
+    def _add_singletons(
+        all_ids: Iterable[str], clusters: ClustersStr
+    ) -> ClustersStr: ...
 
     @staticmethod
     def _add_singletons(all_ids, clusters):
@@ -681,9 +673,9 @@ class GazetteerMatching(Matching):
             self.temp_dir = tempfile.TemporaryDirectory()
             self.db = self.temp_dir.name + "/blocks.db"
 
-        self.indexed_data: Union[
-            MutableMapping[int, RecordDict], MutableMapping[str, RecordDict]
-        ]
+        self.indexed_data: (
+            MutableMapping[int, RecordDict] | MutableMapping[str, RecordDict]
+        )
         self.indexed_data = {}  # type: ignore[assignment]
 
     def _close(self) -> None:
@@ -694,12 +686,10 @@ class GazetteerMatching(Matching):
         self._close()
 
     @overload
-    def index(self, data: DataInt) -> None:
-        ...
+    def index(self, data: DataInt) -> None: ...
 
     @overload
-    def index(self, data: DataStr) -> None:
-        ...
+    def index(self, data: DataStr) -> None: ...
 
     def index(self, data):  # pragma: no cover
         """
@@ -786,12 +776,10 @@ class GazetteerMatching(Matching):
             del self.indexed_data[k]
 
     @overload
-    def blocks(self, data: DataInt) -> BlocksInt:
-        ...
+    def blocks(self, data: DataInt) -> BlocksInt: ...
 
     @overload
-    def blocks(self, data: DataStr) -> BlocksStr:
-        ...
+    def blocks(self, data: DataStr) -> BlocksStr: ...
 
     def blocks(self, data):
         """
@@ -859,10 +847,10 @@ class GazetteerMatching(Matching):
                                ORDER BY a.record_id"""
         )
 
-        pair_blocks: Union[
-            Iterable[tuple[int, Iterable[tuple[int, int]]]],
-            Iterable[tuple[str, Iterable[tuple[str, str]]]],
-        ]
+        pair_blocks: (
+            Iterable[tuple[int, Iterable[tuple[int, int]]]]
+            | Iterable[tuple[str, Iterable[tuple[str, str]]]]
+        )
 
         pair_blocks = itertools.groupby(pairs, lambda x: x[0])
 
@@ -879,7 +867,7 @@ class GazetteerMatching(Matching):
         con.execute("ROLLBACK")
         con.close()
 
-    def score(self, blocks: Blocks) -> Generator[Scores, None, None]:
+    def score(self, blocks: Blocks) -> Generator[Scores]:
         """
         Scores groups of pairs of records. Yields structured numpy arrays
         representing pairs of records in the group and the associated
@@ -1009,14 +997,12 @@ class GazetteerMatching(Matching):
     @overload
     def _format_search_results(
         self, search_d: DataInt, results: ArrayLinks
-    ) -> LookupResultsInt:
-        ...
+    ) -> LookupResultsInt: ...
 
     @overload
     def _format_search_results(
         self, search_d: DataStr, results: ArrayLinks
-    ) -> LookupResultsStr:
-        ...
+    ) -> LookupResultsStr: ...
 
     def _format_search_results(self, search_d, results):
         seen: set[RecordID] = set()
@@ -1121,14 +1107,14 @@ class ActiveMatching(Matching):
 
     def __init__(
         self,
-        variable_definition: Collection[VariableDefinition],
+        variable_definition: Collection[Variable],
         num_cores: int | None = None,
         in_memory: bool = False,
         **kwargs,
     ) -> None:
         """
         Args:
-            variable_definition: A list of dictionaries describing
+            variable_definition: A list of Variable objects describing
                                  the variables will be used for
                                  training a model. See :ref:`variable_definitions`
 
@@ -1318,14 +1304,12 @@ class ActiveMatching(Matching):
                 self.active_learner.mark(examples, y)
             except dedupe.predicates.NoIndexError as e:
                 raise UserWarning(
-                    (
-                        "The record\n"
-                        f"{e.failing_record}\n"
-                        "is not known to to the active learner. "
-                        "Make sure all `labeled_pairs` "
-                        "are in the data or training file "
-                        "of the `prepare_training()` method"
-                    )
+                    "The record\n"
+                    f"{e.failing_record}\n"
+                    "is not known to to the active learner. "
+                    "Make sure all `labeled_pairs` "
+                    "are in the data or training file "
+                    "of the `prepare_training()` method"
                 )
 
     def _checkTrainingPairs(self, labeled_pairs: TrainingData) -> None:

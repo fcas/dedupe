@@ -14,7 +14,7 @@ import dedupe.core as core
 import dedupe.training as training
 
 if TYPE_CHECKING:
-    from typing import Dict, Iterable, Literal, Mapping
+    from typing import Iterable, Literal, Mapping
 
     from dedupe._typing import (
         Data,
@@ -56,7 +56,7 @@ class Learner(ABC, HasCandidates):
         """Train on the given data."""
 
     @abstractmethod
-    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float_]:
+    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float64]:
         """For each of self.candidates, return our current guess [0,1] of if a match."""
 
     @abstractmethod
@@ -92,7 +92,7 @@ class MatchLearner(Learner):
         self._candidates.pop(index)
         self._features = numpy.delete(self._features, index, axis=0)
 
-    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float_]:
+    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float64]:
         if not self._fitted:
             raise ValueError("Must call fit() before candidate_scores()")
         return self._classifier.predict_proba(self._features)[:, 1].reshape(-1, 1)
@@ -103,7 +103,7 @@ class BlockLearner(Learner):
 
     def __init__(self):
         self.current_predicates: tuple[Predicate, ...] = ()
-        self._cached_scores: numpy.typing.NDArray[numpy.float_] | None = None
+        self._cached_scores: numpy.typing.NDArray[numpy.float64] | None = None
         self._old_dupes: TrainingExamples = []
 
     def fit(self, pairs: TrainingExamples, y: LabelsLike) -> None:
@@ -121,7 +121,7 @@ class BlockLearner(Learner):
             self._old_dupes = dupes
         self._fitted = True
 
-    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float_]:
+    def candidate_scores(self) -> numpy.typing.NDArray[numpy.float64]:
         if not self._fitted:
             raise ValueError("Must call fit() before candidate_scores()")
         if self._cached_scores is None:
@@ -170,7 +170,7 @@ class BlockLearner(Learner):
     def _sample_indices(
         self, sample_size: int, max_cover: int
     ) -> Iterable[RecordIDPair]:
-        weights: Dict[RecordIDPair, float] = {}
+        weights: dict[RecordIDPair, float] = {}
         for predicate, covered in self.block_learner.comparison_cover.items():
             # each predicate gets to vote for every record pair it covers. the
             # strength of that vote is in inverse proportion to the number of
@@ -248,7 +248,7 @@ class DedupeBlockLearner(BlockLearner):
     def _index_predicates(self, candidates: TrainingExamples) -> None:
         blocker = self.block_learner.blocker
 
-        records = core.unique((record for pair in candidates for record in pair))
+        records = core.unique(record for pair in candidates for record in pair)
 
         for field in blocker.index_fields:
             unique_fields = {record[field] for record in records}
@@ -258,12 +258,10 @@ class DedupeBlockLearner(BlockLearner):
             pred.freeze(records)
 
     @overload
-    def _sample(self, data: DataInt, sample_size: int) -> TrainingExamples:
-        ...
+    def _sample(self, data: DataInt, sample_size: int) -> TrainingExamples: ...
 
     @overload
-    def _sample(self, data: DataStr, sample_size: int) -> TrainingExamples:
-        ...
+    def _sample(self, data: DataStr, sample_size: int) -> TrainingExamples: ...
 
     def _sample(self, data, sample_size):
         sample_indices = self._sample_indices(
@@ -323,14 +321,12 @@ class RecordLinkBlockLearner(BlockLearner):
     @overload
     def _sample(
         self, data_1: DataInt, data_2: DataInt, sample_size: int
-    ) -> TrainingExamples:
-        ...
+    ) -> TrainingExamples: ...
 
     @overload
     def _sample(
         self, data_1: DataStr, data_2: DataStr, sample_size: int
-    ) -> TrainingExamples:
-        ...
+    ) -> TrainingExamples: ...
 
     def _sample(self, data_1, data_2, sample_size):
         sample_indices = self._sample_indices(sample_size, len(data_1) * len(data_2))
@@ -347,23 +343,49 @@ class DisagreementLearner(HasCandidates):
     def __init__(self) -> None:
         self.y: numpy.typing.NDArray[numpy.int_] = numpy.array([])
         self.pairs: TrainingExamples = []
+        self.rng = numpy.random.default_rng()
 
     def pop(self) -> TrainingExample:
-        if not len(self.candidates):
+        if not (n_candidates := len(self.candidates)):
             raise IndexError("No more unlabeled examples to label")
 
         prob_l = [learner.candidate_scores() for learner in self._learners]
         probs = numpy.concatenate(prob_l, axis=1)
 
         # where do the classifers disagree?
-        disagreement = numpy.std(probs > 0.5, axis=1).astype(bool)
+        decisions = probs > 0.5
+        uncovered_disagreement = numpy.any(decisions != decisions[:, [0]], axis=1) * (
+            probs[:, 1] == 0
+        )
 
-        if disagreement.any():
-            conflicts = disagreement.nonzero()[0]
-            target = numpy.random.uniform(size=1)
-            uncertain_index = conflicts[numpy.argmax(probs[conflicts][:, 0] - target)]
+        if uncovered_disagreement.any():
+            # If there are records that the classifier thinks are
+            # matches but we are not covering with a blocking rule
+            # then choose one of those, with the weights
+            # proportional to the classifier's confidence that it
+            # is a match. These are the most important to capture
+            # for the best possible recall.
+            weights = uncovered_disagreement * probs[:, 0]
+            weights /= weights.sum()
+            uncertain_index = self.rng.choice(n_candidates, p=weights)
+        elif (probs[:, 1] == 1).any():
+            # Otherwise, sample from records that are covered, uniformly
+            # across classifier confidence.
+            #
+            # We don't sample uniformly across covered records, because
+            # negative examples would dominate.
+            covered = (probs[:, 1] == 1).nonzero()[0]
+            target = random.random()
+            uncertain_index = covered[
+                numpy.argmin(numpy.absolute(probs[covered, 0] - target))
+            ]
         else:
-            uncertain_index = numpy.std(probs, axis=1).argmax()
+            # If there are no uncovered disagreements and no covered pairs, then
+            # choose a pair using weights related to the disagreement
+            # between the classifiers
+            weights = numpy.std(probs, axis=1)
+            weights /= weights.sum()
+            uncertain_index = self.rng.choice(n_candidates, p=weights)
 
         logger.debug(
             "Classifier: %.2f, Covered: %s",
